@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Monster Chef Lite 2.3</title>
+<style>
+  body {
+    background: #223366;
+    color: white;
+    font-family: sans-serif;
+    text-align: center;
+    padding: 20px;
+  }
+  .list {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px 0;
+    flex-wrap: wrap;
+  }
+  .item {
+    background: #4455aa;
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .item:hover {
+    transform: scale(1.2);
+  }
+  .selected {
+    box-shadow: 0 0 15px 5px gold;
+    transform: scale(1.1);
+  }
+  #plate {
+    margin: 20px auto;
+    width: 200px;
+    height: 200px;
+    background: #ffddb3;
+    border-radius: 50%;
+    position: relative;
+    overflow: hidden;
+  }
+  .plate-item {
+    width: 50px;
+    height: 50px;
+    position: absolute;
+    border-radius: 8px;
+    background-size: cover;
+    animation: bounceIn 0.5s ease;
+  }
+  @keyframes bounceIn {
+    0% { transform: scale(0.2); opacity: 0; }
+    60% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  button {
+    margin: 10px;
+    padding: 10px 20px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px;
+    border: none;
+  }
+  button:hover {
+    background: #5566cc;
+    color: white;
+  }
+  .score-float {
+    position: absolute;
+    font-size: 20px;
+    font-weight: bold;
+    animation: floatUp 1s ease forwards;
+    pointer-events: none;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-40px); }
+  }
+</style>
+</head>
+<body>
+
+<h1>Monster Chef Lite 2.3</h1>
+
+<div><strong>Pick a Monster:</strong></div>
+<div id="monsters" class="list"></div>
+
+<div><strong>Pick Ingredients:</strong></div>
+<div id="ingredients" class="list"></div>
+
+<div id="plate" aria-label="Plate"></div>
+
+<button id="serveBtn" disabled>Serve</button>
+<button id="clearBtn" disabled>Clear Plate</button>
+<button id="undoBtn" disabled>Undo Last</button>
+<button id="resetBtn">Reset Game</button>
+
+<p id="message" aria-live="polite">Select a monster to start!</p>
+<p id="score">Score: 0</p>
+
+<audio id="soundServe" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="soundHappy" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+<audio id="soundGross" src="https://actions.google.com/sounds/v1/cartoon/splat.ogg"></audio>
+
+<script>
+// --- DATA ---
+const monsters = [
+  {name: 'Bubby', likes: ['Apple', 'Banana'], dislikes: ['Squid'], img:'https://img.genial.ly/6331b00e81146d00188691dc/83b26157-2bb6-4751-9509-32c41a7a12e9.png'},
+  {name: 'Slurp', likes: ['Squid'], dislikes: ['Apple'], img:'https://disneynews.us/wp-content/uploads/2021/05/Celia-Mae-monsters-inc.jpg?wpId=34456'},
+  {name: 'Gloop', likes: ['Squid', 'Banana'], dislikes: ['Apple'], img:'https://wallpaperaccess.com/full/2191806.jpg'},
+  {name: 'Fluff', likes: ['Apple'], dislikes: ['Banana', 'Squid'], img:'https://thumbs.dreamstime.com/b/get-ready-cuteness-overload-cute-kawaii-monster-illustration-featuring-range-pastel-colors-adorable-design-275175073.jpg'}
+];
+
+const ingredients = [
+  {name: 'Apple', img:'https://cdn.pixabay.com/photo/2023/01/05/05/16/apple-7698123_960_720.jpg'},
+  {name: 'Banana', img:'https://tse3.mm.bing.net/th/id/OIP.PL9psEL4DmSkBNPiNWcYmQHaGh?rs=1&pid=ImgDetMain&o=7&rm=3'},
+  {name: 'Squid', img:'https://th.bing.com/th/id/R.59e38b2a6acef09427033de05675c066?rik=HzCiE83vQq9xUQ&riu=http%3a%2f%2fourmarinespecies.com%2fwp-content%2fuploads%2f2018%2f06%2fsquids-17.jpg&ehk=azl5yqFpM63y9CXFlgLqcgK8s89MWUN9VNm5YkBLdFA%3d&risl=&pid=ImgRaw&r=0'},
+  {name: 'Carrot', img:'https://th.bing.com/th/id/R.dd057dfd8ae90e3ffd306573d865b58b?rik=5at2NPrFzioIlQ&pid=ImgRaw&r=0'},
+  {name: 'Fish', img:'https://images.pexels.com/photos/128756/pexels-photo-128756.jpeg?cs=srgb&dl=animal-clown-fish-fish-128756.jpg&fm=jpg'}
+];
+
+// --- STATE ---
+let selectedMonster = null;
+let plate = [];
+let score = parseInt(localStorage.getItem('score')) || 0;
+
+// --- DOM ---
+const monsterDiv = document.getElementById('monsters');
+const ingredientDiv = document.getElementById('ingredients');
+const plateDiv = document.getElementById('plate');
+const serveBtn = document.getElementById('serveBtn');
+const clearBtn = document.getElementById('clearBtn');
+const undoBtn = document.getElementById('undoBtn');
+const resetBtn = document.getElementById('resetBtn');
+const message = document.getElementById('message');
+const scoreDisplay = document.getElementById('score');
+const soundServe = document.getElementById('soundServe');
+const soundHappy = document.getElementById('soundHappy');
+const soundGross = document.getElementById('soundGross');
+
+scoreDisplay.textContent = `Score: ${score}`;
+
+// --- RENDER MONSTERS ---
+function renderMonsters() {
+  monsterDiv.innerHTML = '';
+  monsters.forEach((m,i) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.tabIndex = 0;
+    div.innerHTML = `<img src="${m.img}" alt="${m.name} monster" width="60"><br>${m.name}`;
+    div.onclick = () => selectMonster(i, div);
+    monsterDiv.appendChild(div);
+  });
+}
+
+// --- RENDER INGREDIENTS ---
+function renderIngredients() {
+  ingredientDiv.innerHTML = '';
+  ingredients.forEach((ing,i) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.tabIndex = 0;
+    div.innerHTML = `<img src="${ing.img}" alt="${ing.name}" width="50"><br>${ing.name}`;
+    div.onclick = () => addIngredient(i);
+    ingredientDiv.appendChild(div);
+  });
+}
+
+// --- SELECT MONSTER WITH CONFIRM ---
+function selectMonster(i, element) {
+  if (selectedMonster && selectedMonster !== monsters[i]) {
+    if (!confirm(`Switch to ${monsters[i].name}? Your plate will be cleared.`)) return;
+  }
+  selectedMonster = monsters[i];
+  message.textContent = `You picked ${selectedMonster.name}. Add ingredients!`;
+  plate = [];
+  updatePlate();
+  serveBtn.disabled = false;
+  clearBtn.disabled = false;
+  undoBtn.disabled = true;
+
+  document.querySelectorAll('#monsters .item').forEach(m => m.classList.remove('selected'));
+  element.classList.add('selected');
+}
+
+// --- ADD INGREDIENT ---
+function addIngredient(i) {
+  if (!selectedMonster) { message.textContent = "Pick a monster first!"; return; }
+  if (plate.length >= 5) { message.textContent = "Plate is full! Serve or clear first."; return; }
+  plate.push(ingredients[i]);
+  updatePlate();
+  undoBtn.disabled = false;
+}
+
+// --- UNDO LAST ---
+undoBtn.onclick = () => {
+  plate.pop();
+  updatePlate();
+  if (plate.length === 0) undoBtn.disabled = true;
+}
+
+// --- UPDATE PLATE ---
+function updatePlate() {
+  plateDiv.innerHTML = '';
+  plate.forEach(ing => {
+    const div = document.createElement('div');
+    div.className = 'plate-item';
+    div.style.backgroundImage = `url(${ing.img})`;
+    const angle = Math.random() * 2 * Math.PI;
+    const radius = Math.random() * 70;
+    div.style.top = (90 + radius * Math.sin(angle)) + 'px';
+    div.style.left = (90 + radius * Math.cos(angle)) + 'px';
+    plateDiv.appendChild(div);
+  });
+}
+
+// --- FLOAT SCORE ---
+function floatScore(change) {
+  const float = document.createElement('div');
+  float.className = 'score-float';
+  float.textContent = change > 0 ? `+${change}` : `${change}`;
+  float.style.color = change > 0 ? 'lime' : 'red';
+  const rect = scoreDisplay.getBoundingClientRect();
+  float.style.left = rect.left + window.scrollX + 'px';
+  float.style.top = rect.top + window.scrollY + 'px';
+  document.body.appendChild(float);
+  setTimeout(() => float.remove(), 1000);
+}
+
+// --- SERVE ---
+serveBtn.onclick = () => {
+  if (!selectedMonster || plate.length === 0) { message.textContent = "Select monster and add ingredients first!"; return; }
+  soundServe.play();
+  let loveCount = 0, hateCount = 0;
+  plate.forEach(ing => {
+    if (selectedMonster.likes.includes(ing.name)) loveCount++;
+    if (selectedMonster.dislikes.includes(ing.name)) hateCount++;
+  });
+  if (loveCount > hateCount) {
+    message.textContent = `${selectedMonster.name} loves it! 🎉`;
+    score += 1;
+    soundHappy.play();
+    floatScore(+1);
+  } else if (hateCount > loveCount) {
+    message.textContent = `${selectedMonster.name} hates it! 🤢`;
+    score = Math.max(0, score - 1);
+    soundGross.play();
+    floatScore(-1);
+  } else {
+    message.textContent = `${selectedMonster.name} is meh... 😐`;
+  }
+  scoreDisplay.textContent = `Score: ${score}`;
+  localStorage.setItem('score', score);
+  plate = [];
+  updatePlate();
+  undoBtn.disabled = true;
+}
+
+// --- CLEAR PLATE ---
+clearBtn.onclick = () => {
+  plate = [];
+  updatePlate();
+  undoBtn.disabled = true;
+  message.textContent = selectedMonster ? `Keep adding ingredients for ${selectedMonster.name}` : 'Select a monster!';
+}
+
+// --- RESET GAME ---
+resetBtn.onclick = () => {
+  score = 0;
+  localStorage.setItem('score', score);
+  scoreDisplay.textContent = `Score: ${score}`;
+  plate = [];
+  updatePlate();
+  selectedMonster = null;
+  serveBtn.disabled = true;
+  clearBtn.disabled = true;
+  undoBtn.disabled = true;
+  document.querySelectorAll('#monsters .item').forEach(m => m.classList.remove('selected'));
+  message.textContent = "Game reset! Pick a monster to start again.";
+}
+
+// --- INITIAL RENDER ---
+renderMonsters();
+renderIngredients();
+</script>
+
+</body>
+</html>
+
